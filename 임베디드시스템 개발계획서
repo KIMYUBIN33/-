@@ -1,0 +1,200 @@
+준비물: 서브 모터와 바퀴, 임베디드, 적외선 센서, 전선, 블루투스 모듈
+
+Arduino IDE 코드는 아래와 같습니다.
+
+#include <Servo.h>
+#include <SoftwareSerial.h>
+
+Servo servoLeft;
+Servo servoRight;
+
+// 블루투스 모듈 연결 (HC-05)
+// RX: pin 10, TX: pin 11
+SoftwareSerial BTSerial(10, 11); // RX, TX
+
+char command = 'S'; // 기본 명령: 정지
+
+void setup() {
+  tone(4, 3000, 1000);
+  delay(1000);
+  
+  Serial.begin(9600);      // 디버깅용
+  BTSerial.begin(9600);    // 블루투스 통신
+  
+  servoLeft.attach(13);
+  servoRight.attach(12);
+  
+  stopMotors();
+  
+  Serial.println("로봇 준비 완료!");
+  Serial.println("블루투스 대기 중...");
+}
+
+void loop() {
+  // 블루투스로 명령 수신
+  if (BTSerial.available() > 0) {
+    command = BTSerial.read();
+    Serial.print("명령 수신: ");
+    Serial.println(command);
+    executeCommand(command);
+  }
+  
+  // 시리얼 모니터로도 제어 가능 (테스트용)
+  if (Serial.available() > 0) {
+    command = Serial.read();
+    executeCommand(command);
+  }
+}
+
+void executeCommand(char cmd) {
+  switch(cmd) {
+    case 'F': // Forward (전진)
+      Serial.println("-> 전진");
+      moveForward();
+      break;
+    case 'B': // Backward (후진)
+      Serial.println("-> 후진");
+      moveBackward();
+      break;
+    case 'L': // Left (왼쪽 회전)
+      Serial.println("-> 좌회전");
+      turnLeft();
+      break;
+    case 'R': // Right (오른쪽 회전)
+      Serial.println("-> 우회전");
+      turnRight();
+      break;
+    case 'S': // Stop (정지)
+      Serial.println("-> 정지");
+      stopMotors();
+      break;
+    default:
+      stopMotors();
+      break;
+  }
+}
+
+void moveForward() {
+  servoLeft.writeMicroseconds(1700);   // 왼쪽 서보 반시계방향
+  servoRight.writeMicroseconds(1300);  // 오른쪽 서보 시계방향
+}
+
+void moveBackward() {
+  servoLeft.writeMicroseconds(1300);   // 왼쪽 서보 시계방향
+  servoRight.writeMicroseconds(1700);  // 오른쪽 서보 반시계방향
+}
+
+void turnLeft() {
+  servoLeft.writeMicroseconds(1300);   // 왼쪽 서보 시계방향
+  servoRight.writeMicroseconds(1300);  // 오른쪽 서보 시계방향
+}
+
+void turnRight() {
+  servoLeft.writeMicroseconds(1700);   // 왼쪽 서보 반시계방향
+  servoRight.writeMicroseconds(1700);  // 오른쪽 서보 반시계방향
+}
+
+void stopMotors() {
+  servoLeft.writeMicroseconds(1500);   // 정지
+  servoRight.writeMicroseconds(1500);  // 정지
+}
+
+
+프로세싱 코드는 아래와 같습니다.
+
+import processing.serial.*;
+
+Serial arduinoPort;
+Serial bluetoothPort;
+
+String arduinoPortName = "COM3";  // Arduino 포트 (Mac: /dev/cu.usbserial)
+String bluetoothPortName = "COM4"; // 블루투스 포트 (Mac: /dev/cu.HC-05)
+
+void setup() {
+  size(400, 300);
+  
+  // 사용 가능한 포트 출력
+  println("사용 가능한 포트:");
+  printArray(Serial.list());
+  
+  // Arduino 연결
+  try {
+    arduinoPort = new Serial(this, arduinoPortName, 9600);
+    println("Arduino 연결 성공: " + arduinoPortName);
+  } catch (Exception e) {
+    println("Arduino 연결 실패: " + e.getMessage());
+  }
+  
+  // 블루투스 연결
+  try {
+    bluetoothPort = new Serial(this, bluetoothPortName, 9600);
+    println("블루투스 연결 성공: " + bluetoothPortName);
+  } catch (Exception e) {
+    println("블루투스 연결 실패: " + e.getMessage());
+  }
+  
+  background(200);
+  textAlign(CENTER, CENTER);
+  textSize(16);
+}
+
+void draw() {
+  background(200);
+  fill(0);
+  text("로봇 제어 브릿지", width/2, 50);
+  text("상태: 실행 중", width/2, 100);
+  
+  // 블루투스에서 데이터 수신
+  if (bluetoothPort != null && bluetoothPort.available() > 0) {
+    char command = bluetoothPort.readChar();
+    println("받은 명령: " + command);
+    
+    // Arduino로 명령 전송
+    if (arduinoPort != null) {
+      arduinoPort.write(command);
+      displayCommand(command);
+    }
+  }
+  
+  // 키보드로 테스트
+  if (keyPressed) {
+    char cmd = getCommandFromKey(key);
+    if (cmd != 'X' && arduinoPort != null) {
+      arduinoPort.write(cmd);
+      displayCommand(cmd);
+    }
+  }
+}
+
+void displayCommand(char cmd) {
+  fill(0, 150, 0);
+  String cmdText = "";
+  switch(cmd) {
+    case 'F': cmdText = "전진 ▲"; break;
+    case 'B': cmdText = "후진 ▼"; break;
+    case 'L': cmdText = "좌회전 ◄"; break;
+    case 'R': cmdText = "우회전 ►"; break;
+    case 'S': cmdText = "정지 ■"; break;
+  }
+  text("현재 명령: " + cmdText, width/2, 150);
+}
+
+char getCommandFromKey(char k) {
+  switch(k) {
+    case 'w': case 'W': return 'F';
+    case 's': case 'S': return 'B';
+    case 'a': case 'A': return 'L';
+    case 'd': case 'D': return 'R';
+    case ' ': return 'S';
+    default: return 'X';
+  }
+}
+
+void keyReleased() {
+  // 키를 떼면 정지
+  if (arduinoPort != null) {
+    arduinoPort.write('S');
+  }
+}
+
+
